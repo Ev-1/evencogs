@@ -158,7 +158,7 @@ class DailyCriminal(commands.Cog):
     @checks.mod_or_permissions(administrator=True)
     async def end(self, ctx, member: commands.MemberConverter, updated_count: int=None):
         """
-        End the daily criminal countdown for a member early. Option to update DC count.
+        End the daily criminal countdown for a member early. Optional argument updates the DC counter.
         """
         stored_member_info = self.config.member(member)
         status = await stored_member_info.status()
@@ -167,6 +167,10 @@ class DailyCriminal(commands.Cog):
         if not roleid:
             return await ctx.send("A daily criminal role has not been set.")
         role = ctx.guild.get_role(roleid)
+
+        if updated_count is not None:
+            await stored_member_info.count.set(updated_count)
+            await ctx.send(f"Daily criminal count set to {updated_count}")
 
         if status == 1 or status == 2 or status == 3:
             try:
@@ -177,8 +181,6 @@ class DailyCriminal(commands.Cog):
             await stored_member_info.status.set(0)
             await stored_member_info.end_time.set(None)
 
-            if updated_count:
-                await stored_member_info.count.set(updated_count)
 
             await ctx.send(f"DC ended for {member.name}")
         else:
