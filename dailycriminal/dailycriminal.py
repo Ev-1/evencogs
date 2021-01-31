@@ -93,12 +93,15 @@ class DailyCriminal(commands.Cog):
         """
         Give a member the daily criminal role.
         """
+        roleid = await self.config.guild(ctx.guild).role()
+        if not roleid:
+            return await ctx.send("A daily criminal role has not been set.")
+        role = ctx.guild.get_role(roleid)
+
         stored_member_info = self.config.member(member)
         status = await stored_member_info.status()
         if status == 0:
             # Give the DC role
-            _role = await self.config.guild(ctx.guild).role()
-            role = ctx.guild.get_role(_role)
             try:
                 await member.add_roles(role, reason="Daily criminal")
             except discord.Forbidden:
@@ -162,9 +165,13 @@ class DailyCriminal(commands.Cog):
         """
         stored_member_info = self.config.member(member)
         status = await stored_member_info.status()
+
+        roleid = await self.config.guild(ctx.guild).role()
+        if not roleid:
+            return await ctx.send("A daily criminal role has not been set.")
+        role = ctx.guild.get_role(roleid)
+
         if status == 1 or status == 2 or status == 3:
-            _role = await self.config.guild(ctx.guild).role()
-            role = ctx.guild.get_role(_role)
             try:
                 await member.remove_roles(role, reason="DC end")
             except (discord.Forbidden, discord.HTTPException):
@@ -223,8 +230,10 @@ class DailyCriminal(commands.Cog):
         for guild, members in all_members.items():
 
             guild = self.bot.get_guild(guild)
-            _role = await self.config.guild(guild).role()
-            role = guild.get_role(_role)
+            roleid = await self.config.guild(ctx.guild).role()
+            if not roleid:
+                return
+            role = ctx.guild.get_role(roleid)
 
             for member_id, info in members.items():
                 if info['status'] == 2:
