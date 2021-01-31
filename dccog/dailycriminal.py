@@ -1,0 +1,241 @@
+import discord
+
+from redbot.core import commands, checks, modlog, Config
+from discord.ext import tasks
+from datetime import datetime, timedelta
+
+class DailyCriminal(commands.Cog):
+    """My custom cog"""
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.dc_ender.start()
+
+        self.config = Config.get_conf(self, identifier=13376942096)
+
+        default_member = {
+            "count": 0,
+            "status": 0,
+            "end_time": None,
+        }
+
+        default_guild_config = {
+            "role": None,
+        }
+
+        self.config.register_member(**default_member)
+        self.config.register_guild(**default_guild_config)
+
+
+    async def initialize(self):
+        await self.register_casetypes()
+
+
+    @staticmethod
+    async def register_casetypes():
+        dc_case = {
+            "name": "dc",
+            "default_setting": True,
+            "image": "\N{NEW MOON WITH FACE}",
+            "case_str": "Daily Criminal",
+        }
+        perm_dc_case = {
+            "name": "permdc",
+            "default_setting": True,
+            "image": "\N{NEW MOON WITH FACE}",
+            "case_str": "Permanent Daily Criminal",
+        }
+
+        try:
+            await modlog.register_casetype(**dc_case)
+            await modlog.register_casetype(**perm_dc_case)
+        except RuntimeError:
+            pass
+
+    def cog_unload(self):
+        self.dc_ender.cancel()
+
+
+    def map_count_to_timedelta(self, count):
+        if count == 0:
+            return timedelta(days=3)
+        elif count == 1:
+            return timedelta(days=7)
+        elif count == 2:
+            return timedelta(days=30)
+        else:
+            return timedelta(days=1000)
+
+
+
+    @commands.group()
+    @checks.mod_or_permissions(administrator=True)
+    async def dcset(self, ctx):
+        pass
+
+    @dcset.command()
+    @checks.mod_or_permissions(administrator=True)
+    async def role(self, ctx, role: commands.RoleConverter):
+        """
+        Set the role to be used for daily criminal.
+        """
+        await self.config.guild(ctx.guild).role.set(role.id)
+        await ctx.send(f"Daily criminal role set to: {role.name}")
+
+    @commands.group()
+    @checks.mod_or_permissions(administrator=True)
+    async def dc(self, ctx):
+        pass
+
+    @dc.command()
+    @checks.mod_or_permissions(administrator=True)
+    async def give(self, ctx, member: commands.MemberConverter, *, reason: str = None):
+        """
+        Give a member the daily criminal role.
+        """
+        stored_member_info = self.config.member(member)
+        status = await stored_member_info.status()
+        if status == 0:
+            # Give the DC role
+            _role = await self.config.guild(ctx.guild).role()
+            role = ctx.guild.get_role(_role)
+            try:
+                await member.add_roles(role, reason="Daily criminal")
+            except discord.Forbidden:
+                return await ctx.send("Missing permissions")
+
+            # Update status and dc count
+            c = await stored_member_info.count()
+            await stored_member_info.count.set(int(c) + 1)
+            if c > 2:
+                await stored_member_info.status.set(3)
+                dc_type = "permdc"
+            else:
+                await stored_member_info.status.set(1)
+                dc_type = "dc"
+
+            # Make a modlog case
+            case = await modlog.create_case(
+                ctx.bot, ctx.guild, ctx.message.created_at, action_type=dc_type,
+                user=member, moderator=ctx.author, reason=reason)
+
+            await ctx.send("User given daily criminal")
+        elif status == 1:
+            await ctx.send("User already has daily criminal")
+        elif status == 2:
+            await ctx.send("User is on daily criminal countdown")
+        else:
+            await ctx.send("User has permanent daily criminal")
+
+
+    @dc.command()
+    @checks.mod_or_permissions(administrator=True)
+    async def start(self, ctx, member: commands.MemberConverter):
+        """
+        Start the daily criminal countdown for a member.
+        """        
+        stored_member_info = self.config.member(member)
+        status = await stored_member_info.status()
+
+        if status == 1:
+            count = await stored_member_info.count()            
+            now = datetime.now()
+            duration = self.map_count_to_timedelta(count)
+
+            # Update status
+            await stored_member_info.end_time.set(datetime.timestamp(now + duration))
+            await stored_member_info.status.set(2)
+            await ctx.send("Daily criminal countdown started")
+        elif status == 2:
+            await ctx.send("User already has active countdown")
+        elif status == 3:
+            await ctx.send("User has permanent daily criminal")
+        else:
+            await ctx.send("User not in daily criminals")
+
+
+    @dc.command()
+    @checks.mod_or_permissions(administrator=True)
+    async def end(self, ctx, member: commands.MemberConverter, updated_count: int=None):
+        """
+        End the daily criminal countdown for a member early. Option to update DC count.
+        """
+        stored_member_info = self.config.member(member)
+        status = await stored_member_info.status()
+        if status == 1 or status == 2 or status == 3:
+            _role = await self.config.guild(ctx.guild).role()
+            role = ctx.guild.get_role(_role)
+            try:
+                await member.remove_roles(role, reason="DC end")
+            except (discord.Forbidden, discord.HTTPException):
+                return
+            
+            await stored_member_info.status.set(0)
+            await stored_member_info.end_time.set(None)
+
+            if updated_count:
+                await stored_member_info.count.set(updated_count)
+
+            await ctx.send(f"DC ended for {member.name}")
+        else:
+            await ctx.send(f"{member.name} does not have daily criminal.")
+
+
+    @dc.command()
+    @checks.mod_or_permissions(administrator=True)
+    async def status(self, ctx, member: commands.MemberConverter):
+        """
+        Chech the daily criminal status for a member.
+        """
+        stored_member_info = await self.config.member(member)()
+
+        embed = discord.Embed(title=f"DC status for {member} ({member.id})")
+        embed = embed.add_field(name="DC count", value=stored_member_info["count"])
+
+        status = stored_member_info["status"]
+        if status == 0:
+            embed = embed.add_field(name="Status", value="Not daily criminal")
+        if status == 1:
+            embed = embed.add_field(name="Status", value="Given daily criminal")
+        if status == 2:
+            embed = embed.add_field(name="Status", value="In daily criminal countdown")
+            end = datetime.fromtimestamp(stored_member_info["end_time"])
+            embed = embed.add_field(name="End time", value=end.strftime("%Y-%m-%d %H:%M"), inline=False)
+
+            diff = (end - datetime.now()).total_seconds()
+            remaining_days = int(diff)//(3600 * 24)
+            remaining_hours = int(diff - 3600 * 24 * remaining_days)//3600
+            remaining_minutes = int(diff - 3600 * 24 * remaining_days - remaining_hours * 3600)//60
+            embed = embed.add_field(name="Remaining", value=f"{remaining_days}d {remaining_hours}h {remaining_minutes}m", inline=False)
+
+        if status == 3:
+            embed = embed.add_field(name="Status", value="Permanent daily criminal")
+
+        await ctx.send(embed=embed)
+
+
+    @tasks.loop(seconds=5.0)
+    async def dc_ender(self):
+        get_members = self.config.all_members
+        all_members = await get_members()
+
+        now = datetime.now()
+        for guild, members in all_members.items():
+
+            guild = self.bot.get_guild(guild)
+            _role = await self.config.guild(guild).role()
+            role = guild.get_role(_role)
+
+            for member_id, info in members.items():
+                if info['status'] == 2:
+                    end = datetime.fromtimestamp(info['end_time'])
+                    if now > end:
+                        member = guild.get_member(member_id)
+                        member_info = self.config.member(member)
+                        try:
+                            await member.remove_roles(role, reason="DC end")
+                        except (discord.Forbidden, discord.HTTPException):
+                            return
+                        await member_info.status.set(0)
+                        await member_info.end_time.set(None)
+
