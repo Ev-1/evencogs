@@ -218,7 +218,7 @@ class DailyCriminal(commands.Cog):
         await ctx.send(embed=embed)
 
 
-    @tasks.loop(seconds=5.0)
+    @tasks.loop(seconds=60.0)
     async def dc_ender(self):
         get_members = self.config.all_members
         all_members = await get_members()
