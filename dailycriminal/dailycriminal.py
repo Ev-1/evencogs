@@ -56,7 +56,9 @@ class DailyCriminal(commands.Cog):
         self.dc_ender.cancel()
 
     def map_count_to_timedelta(self, count):
-        if count == 1:
+        if count < 1:
+            return timedelta(minutes=1)
+        elif count == 1:
             return timedelta(days=3)
         elif count == 2:
             return timedelta(days=7)
@@ -79,10 +81,13 @@ class DailyCriminal(commands.Cog):
         await self.config.guild(ctx.guild).role.set(role.id)
         await ctx.send(f"Daily criminal role set to: {role.name}")
 
-    @commands.group()
+    @commands.group(invoke_without_command=True)
     @checks.mod_or_permissions(administrator=True)
-    async def dc(self, ctx):
-        pass
+    async def dc(self, ctx, member: commands.MemberConverter, *, reason):
+        """
+        Give a member the daily criminal role, aliases to "dc give".
+        """
+        await self.give(ctx, member, reason=reason)
 
     @dc.command()
     @checks.mod_or_permissions(administrator=True)
@@ -158,7 +163,7 @@ class DailyCriminal(commands.Cog):
     @checks.mod_or_permissions(administrator=True)
     async def end(self, ctx, member: commands.MemberConverter, updated_count: int=None):
         """
-        End the daily criminal countdown for a member early. Optional argument updates the DC counter.
+        End the daily criminal countdown for a member early. Optional argument to set the daily criminal counter.
         """
         stored_member_info = self.config.member(member)
         status = await stored_member_info.status()
@@ -180,7 +185,6 @@ class DailyCriminal(commands.Cog):
             
             await stored_member_info.status.set(0)
             await stored_member_info.end_time.set(None)
-
 
             await ctx.send(f"DC ended for {member.name}")
         else:
@@ -229,10 +233,10 @@ class DailyCriminal(commands.Cog):
         for guild, members in all_members.items():
 
             guild = self.bot.get_guild(guild)
-            roleid = await self.config.guild(ctx.guild).role()
+            roleid = await self.config.guild(guild).role()
             if not roleid:
-                return
-            role = ctx.guild.get_role(roleid)
+                continue
+            role = guild.get_role(roleid)
 
             for member_id, info in members.items():
                 if info['status'] == 2:
