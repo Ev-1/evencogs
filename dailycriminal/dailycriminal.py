@@ -55,18 +55,15 @@ class DailyCriminal(commands.Cog):
     def cog_unload(self):
         self.dc_ender.cancel()
 
-
     def map_count_to_timedelta(self, count):
-        if count == 0:
+        if count == 1:
             return timedelta(days=3)
-        elif count == 1:
-            return timedelta(days=7)
         elif count == 2:
+            return timedelta(days=7)
+        elif count == 3:
             return timedelta(days=30)
         else:
             return timedelta(days=1000)
-
-
 
     @commands.group()
     @checks.mod_or_permissions(administrator=True)
@@ -247,4 +244,3 @@ class DailyCriminal(commands.Cog):
                             return
                         await member_info.status.set(0)
                         await member_info.end_time.set(None)
-
