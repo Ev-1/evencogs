@@ -36,13 +36,13 @@ class DailyCriminal(commands.Cog):
         dc_case = {
             "name": "dc",
             "default_setting": True,
-            "image": "\N{NEW MOON WITH FACE}",
+            "image": "\N{SPEAKER WITH CANCELLATION STROKE}",
             "case_str": "Daily Criminal",
         }
         perm_dc_case = {
             "name": "permdc",
             "default_setting": True,
-            "image": "\N{NEW MOON WITH FACE}",
+            "image": "\N{SPEAKER WITH CANCELLATION STROKE}",
             "case_str": "Permanent Daily Criminal",
         }
 
