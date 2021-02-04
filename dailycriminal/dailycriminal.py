@@ -4,12 +4,20 @@ from redbot.core import commands, checks, modlog, Config
 from discord.ext import tasks
 from datetime import datetime, timedelta
 
+import logging
+
+from collections import deque
+
+log = logging.getLogger("even.dailycriminal")
+
 class DailyCriminal(commands.Cog):
     """My custom cog"""
 
     def __init__(self, bot):
         self.bot = bot
         self.dc_ender.start()
+
+        self.bad_log = deque([], maxlen=5)
 
         self.config = Config.get_conf(self, identifier=13376942096)
 
@@ -80,6 +88,18 @@ class DailyCriminal(commands.Cog):
         """
         await self.config.guild(ctx.guild).role.set(role.id)
         await ctx.send(f"Daily criminal role set to: {role.name}")
+
+
+    @dcset.command()
+    @checks.mod_or_permissions(administrator=True)
+    async def log(self, ctx, pos: int):
+        """
+        Set the role to be used for daily criminal.
+        """
+        if pos < 0 or pos > 5:
+            return
+        await ctx.send("```" + self.bad_log[pos] + "```")
+
 
     @commands.group(invoke_without_command=True)
     @checks.mod_or_permissions(administrator=True)
@@ -226,27 +246,36 @@ class DailyCriminal(commands.Cog):
 
     @tasks.loop(seconds=60.0)
     async def dc_ender(self):
-        get_members = self.config.all_members
-        all_members = await get_members()
+        try:
 
-        now = datetime.now()
-        for guild, members in all_members.items():
+            get_members = self.config.all_members
+            all_members = await get_members()
 
-            guild = self.bot.get_guild(guild)
-            roleid = await self.config.guild(guild).role()
-            if not roleid:
-                continue
-            role = guild.get_role(roleid)
+            now = datetime.now()
+            for guild, members in all_members.items():
+                guild = self.bot.get_guild(guild)
+                if guild is None:
+                    guild = await self.bot.fetch_guild(guild)
+                    if guild is None:
+                        continue
+                roleid = await self.config.guild(guild).role()
+                if not roleid:
+                    continue
+                role = guild.get_role(roleid)
 
-            for member_id, info in members.items():
-                if info['status'] == 2:
-                    end = datetime.fromtimestamp(info['end_time'])
-                    if now > end:
-                        member = guild.get_member(member_id)
-                        member_info = self.config.member(member)
-                        try:
+                for member_id, info in members.items():
+                    if info['status'] == 2:
+                        end = datetime.fromtimestamp(info['end_time'])
+                        if now > end:
+                            member = guild.get_member(member_id)
+                            if member is None:
+                                member = await guild.fetch_member(member_id)
+
+                            member_info = self.config.member(member)
                             await member.remove_roles(role, reason="DC end")
-                        except (discord.Forbidden, discord.HTTPException):
-                            return
-                        await member_info.status.set(0)
-                        await member_info.end_time.set(None)
+                            await member_info.status.set(0)
+                            await member_info.end_time.set(None)
+        except Exception as e:
+            log.exception("Error removing roles")
+            self.bad_log.appendleft(str(e))
+
