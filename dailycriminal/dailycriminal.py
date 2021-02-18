@@ -278,7 +278,7 @@ class DailyCriminal(commands.Cog):
         await ctx.send("```\n" + out_str + "```")
 
 
-    @tasks.loop(seconds=5.0)
+    @tasks.loop(seconds=120.0)
     async def dc_ender(self):
         get_members = self.config.all_members
         all_members = await get_members()
