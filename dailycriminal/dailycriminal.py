@@ -210,6 +210,17 @@ class DailyCriminal(commands.Cog):
         else:
             await ctx.send(f"{member.name} does not have daily criminal.")
 
+    def remaining_time_string(self, end_time):
+        if end_time is None:
+            return "-"
+        if isinstance(end_time, float):
+            end_time = datetime.fromtimestamp(end_time)
+        diff = (end_time - datetime.now()).total_seconds()
+        remaining_days = int(diff)//(3600 * 24)
+        remaining_hours = int(diff - 3600 * 24 * remaining_days)//3600
+        remaining_minutes = int(diff - 3600 * 24 * remaining_days - remaining_hours * 3600)//60
+        return f"{remaining_days}d {remaining_hours}h {remaining_minutes}m"
+
 
     @dc.command()
     @checks.mod_or_permissions(administrator=True)
@@ -231,39 +242,61 @@ class DailyCriminal(commands.Cog):
             embed = embed.add_field(name="Status", value="In daily criminal countdown")
             end = datetime.fromtimestamp(stored_member_info["end_time"])
             embed = embed.add_field(name="End time", value=end.strftime("%Y-%m-%d %H:%M"), inline=False)
-
-            diff = (end - datetime.now()).total_seconds()
-            remaining_days = int(diff)//(3600 * 24)
-            remaining_hours = int(diff - 3600 * 24 * remaining_days)//3600
-            remaining_minutes = int(diff - 3600 * 24 * remaining_days - remaining_hours * 3600)//60
-            embed = embed.add_field(name="Remaining", value=f"{remaining_days}d {remaining_hours}h {remaining_minutes}m", inline=False)
+            embed = embed.add_field(name="Remaining", value=self.remaining_time_string(end), inline=False)
 
         if status == 3:
             embed = embed.add_field(name="Status", value="Permanent daily criminal")
 
         await ctx.send(embed=embed)
 
+    @dc.command(name="list")
+    @checks.mod_or_permissions(administrator=True)
+    async def _list(self, ctx):
+        members = await self.config.all_members()
+        guild_members = members[ctx.guild.id]
+        memberlist = []
+        for member, stats in guild_members.items():
+            if stats['status']:
+                memberlist.append({'memberid': member, **stats})
 
-    @tasks.loop(seconds=60.0)
+        memberlist.sort(key=lambda m: m['end_time'] if m['end_time'] else float(1e20))
+
+        def pad_str(to_add: str, width: int=25) -> str:
+            if width-len(to_add) > 0:
+                return to_add + " "*(width-len(to_add))
+            return to_add
+
+        out_str = pad_str("User ID") + pad_str("Count", width=15) + pad_str("Status", width=20) + \
+                  pad_str("Remaining time", width=15) + "\n"
+
+        for m in memberlist:
+            out_str += pad_str(f"{m['memberid']}")
+            out_str += pad_str(f"{m['count']}", width=15)
+            out_str += pad_str(f"{'Given role' if m['status'] == 1 else 'In countdown'}", width=20)
+            out_str += pad_str(f"{self.remaining_time_string(m['end_time'])}", width=15)
+            out_str += "\n"
+        await ctx.send("```\n" + out_str + "```")
+
+
+    @tasks.loop(seconds=5.0)
     async def dc_ender(self):
-        try:
+        get_members = self.config.all_members
+        all_members = await get_members()
 
-            get_members = self.config.all_members
-            all_members = await get_members()
-
-            now = datetime.now()
-            for guild, members in all_members.items():
-                guild = self.bot.get_guild(guild)
+        now = datetime.now()
+        for guild, members in all_members.items():
+            guild = self.bot.get_guild(guild)
+            if guild is None:
+                guild = await self.bot.fetch_guild(guild)
                 if guild is None:
-                    guild = await self.bot.fetch_guild(guild)
-                    if guild is None:
-                        continue
-                roleid = await self.config.guild(guild).role()
-                if not roleid:
                     continue
-                role = guild.get_role(roleid)
+            roleid = await self.config.guild(guild).role()
+            if not roleid:
+                continue
+            role = guild.get_role(roleid)
 
-                for member_id, info in members.items():
+            for member_id, info in members.items():
+                try:
                     if info['status'] == 2:
                         end = datetime.fromtimestamp(info['end_time'])
                         if now > end:
@@ -275,7 +308,7 @@ class DailyCriminal(commands.Cog):
                             await member.remove_roles(role, reason="DC end")
                             await member_info.status.set(0)
                             await member_info.end_time.set(None)
-        except Exception as e:
-            log.exception("Error removing roles")
-            self.bad_log.appendleft(str(e))
+                except Exception as e:
+                    log.exception("Error removing roles")
+                    self.bad_log.appendleft(str(e))
 
