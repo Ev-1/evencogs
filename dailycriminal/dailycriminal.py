@@ -266,16 +266,25 @@ class DailyCriminal(commands.Cog):
                 return to_add + " "*(width-len(to_add))
             return to_add
 
-        out_str = pad_str("User ID") + pad_str("Count", width=15) + pad_str("Status", width=20) + \
+        out_strs = []
+        out = pad_str("User ID") + pad_str("Count", width=15) + pad_str("Status", width=20) + \
                   pad_str("Remaining time", width=15) + "\n"
 
         for m in memberlist:
-            out_str += pad_str(f"{m['memberid']}")
-            out_str += pad_str(f"{m['count']}", width=15)
-            out_str += pad_str(f"{'Given role' if m['status'] == 1 else 'In countdown'}", width=20)
-            out_str += pad_str(f"{self.remaining_time_string(m['end_time'])}", width=15)
-            out_str += "\n"
-        await ctx.send("```\n" + out_str + "```")
+            n = pad_str(f"{m['memberid']}")
+            n += pad_str(f"{m['count']}", width=15)
+            n += pad_str(f"{'Given role' if m['status'] == 1 else 'In countdown'}", width=20)
+            n += pad_str(f"{self.remaining_time_string(m['end_time'])}", width=15)
+            n += "\n"
+            if len(n) + len(out) + 7 > 2000:
+                out_strs.append(out)
+                out = n
+            else:
+                out += n
+        out_strs.append(out)
+        
+        for o in out_strs:
+            await ctx.send("```\n" + o + "```")
 
 
     @tasks.loop(seconds=120.0)
