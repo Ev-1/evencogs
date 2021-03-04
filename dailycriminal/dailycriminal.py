@@ -34,6 +34,11 @@ class DailyCriminal(commands.Cog):
         self.config.register_member(**default_member)
         self.config.register_guild(**default_guild_config)
 
+        self.bot_initialized = False
+        self.not_in_server = []
+
+        self.loop_index = 0
+
 
     async def initialize(self):
         await self.register_casetypes()
@@ -98,7 +103,46 @@ class DailyCriminal(commands.Cog):
         """
         if pos < 0 or pos > 5:
             return
-        await ctx.send("```" + self.bad_log[pos] + "```")
+        try:
+            await ctx.send("```" + self.bad_log[pos] + "```")
+        except:
+            await ctx.send("No logs")
+
+    @dcset.command()
+    @check.mod_or_permissions(administrator=True)
+    async def check(self, ctx):
+        get_members = self.config.all_members
+        all_members = await get_members()
+
+        for guild, members in all_members.items():
+            guild = self.bot.get_guild(guild)
+            if guild is None:
+                guild = await self.bot.fetch_guild(guild)
+                if guild is None:
+                    continue
+            roleid = await self.config.guild(guild).role()
+            if not roleid:
+                continue
+            role = guild.get_role(roleid)
+
+            for member_id, info in members.items():
+                try:
+                    if info['status'] == 2:
+                        end = datetime.fromtimestamp(info['end_time'])
+                        if int((end - datetime.now()).total_seconds()) < 0:
+                            member = guild.get_member(member_id)
+                            if member is None:
+                                member = await guild.fetch_member(member_id)
+
+                            if member is None:
+                                self.not_in_server.append(member_id)
+
+                            member_info = self.config.member(member)
+                            await member.remove_roles(role, reason="DC end")
+                            await member_info.status.set(0)
+                            await member_info.end_time.set(None)
+                except Exception as e:
+                    await ctx.send(str(e) + f" Failed for {member_id}")
 
 
     @commands.group(invoke_without_command=True)
@@ -215,11 +259,16 @@ class DailyCriminal(commands.Cog):
             return "-"
         if isinstance(end_time, float):
             end_time = datetime.fromtimestamp(end_time)
-        diff = (end_time - datetime.now()).total_seconds()
+        diff = int((end_time - datetime.now()).total_seconds())
+        
+        prefix = ""
+        if diff < 0:
+            prefix = "-"
+            diff = -diff
         remaining_days = int(diff)//(3600 * 24)
         remaining_hours = int(diff - 3600 * 24 * remaining_days)//3600
         remaining_minutes = int(diff - 3600 * 24 * remaining_days - remaining_hours * 3600)//60
-        return f"{remaining_days}d {remaining_hours}h {remaining_minutes}m"
+        return f"{prefix}{remaining_days}d {remaining_hours}h {remaining_minutes}m"
 
 
     @dc.command()
@@ -243,7 +292,6 @@ class DailyCriminal(commands.Cog):
             end = datetime.fromtimestamp(stored_member_info["end_time"])
             embed = embed.add_field(name="End time", value=end.strftime("%Y-%m-%d %H:%M"), inline=False)
             embed = embed.add_field(name="Remaining", value=self.remaining_time_string(end), inline=False)
-
         if status == 3:
             embed = embed.add_field(name="Status", value="Permanent daily criminal")
 
@@ -287,12 +335,22 @@ class DailyCriminal(commands.Cog):
             await ctx.send("```\n" + o + "```")
 
 
-    @tasks.loop(seconds=120.0)
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        self.not_in_server.remove(member.id)
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        self.not_in_server.append(member.id)
+
+    @tasks.loop(minutes=2.0)
     async def dc_ender(self):
         get_members = self.config.all_members
         all_members = await get_members()
 
-        now = datetime.now()
+
+        self.loop_index = (self.loop_index + 1) % 10
+
         for guild, members in all_members.items():
             guild = self.bot.get_guild(guild)
             if guild is None:
@@ -305,19 +363,27 @@ class DailyCriminal(commands.Cog):
             role = guild.get_role(roleid)
 
             for member_id, info in members.items():
-                try:
-                    if info['status'] == 2:
-                        end = datetime.fromtimestamp(info['end_time'])
-                        if now > end:
-                            member = guild.get_member(member_id)
-                            if member is None:
-                                member = await guild.fetch_member(member_id)
+                # Check members not in the server every once in a while
+                if (self.loop_index == 0) or (member_id not in self.not_in_server):
+                    try:
+                        if info['status'] == 2:
+                            end = datetime.fromtimestamp(info['end_time'])
+                            if int((end - datetime.now()).total_seconds()) < 0:
+                                member = guild.get_member(member_id)
+                                if member is None:
+                                    member = await guild.fetch_member(member_id)
 
-                            member_info = self.config.member(member)
-                            await member.remove_roles(role, reason="DC end")
-                            await member_info.status.set(0)
-                            await member_info.end_time.set(None)
-                except Exception as e:
-                    log.exception("Error removing roles")
-                    self.bad_log.appendleft(str(e))
+                                if member is None:
+                                    self.not_in_server.append(member_id)
 
+                                member_info = self.config.member(member)
+                                await member.remove_roles(role, reason="DC end")
+                                await member_info.status.set(0)
+                                await member_info.end_time.set(None)
+                    except Exception as e:
+                        log.exception("Error removing roles")
+                        self.bad_log.appendleft(str(e))
+
+    @dc_ender.before_loop
+    async def before_dc_ender(self):
+        await self.bot.wait_until_ready()
