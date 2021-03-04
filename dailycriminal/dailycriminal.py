@@ -108,9 +108,10 @@ class DailyCriminal(commands.Cog):
         except:
             await ctx.send("No logs")
 
-    @dcset.command()
-    @check.mod_or_permissions(administrator=True)
-    async def check(self, ctx):
+    @dcset.command(name="check")
+    @checks.mod_or_permissions(administrator=True)
+    async def _check(self, ctx):
+        await ctx.send("Checking daily criminals...")
         get_members = self.config.all_members
         all_members = await get_members()
 
@@ -143,6 +144,7 @@ class DailyCriminal(commands.Cog):
                             await member_info.end_time.set(None)
                 except Exception as e:
                     await ctx.send(str(e) + f" Failed for {member_id}")
+        await ctx.send("Checked")
 
 
     @commands.group(invoke_without_command=True)
@@ -304,7 +306,7 @@ class DailyCriminal(commands.Cog):
         guild_members = members[ctx.guild.id]
         memberlist = []
         for member, stats in guild_members.items():
-            if stats['status']:
+            if stats['status'] and member not in self.not_in_server:
                 memberlist.append({'memberid': member, **stats})
 
         memberlist.sort(key=lambda m: m['end_time'] if m['end_time'] else float(1e20))
