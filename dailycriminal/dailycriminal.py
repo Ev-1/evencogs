@@ -25,6 +25,7 @@ class DailyCriminal(commands.Cog):
             "count": 0,
             "status": 0,
             "end_time": None,
+            "reason": "",
         }
 
         default_guild_config = {
@@ -176,6 +177,7 @@ class DailyCriminal(commands.Cog):
                 return await ctx.send("Missing permissions")
 
             # Update status and dc count
+            await stored_member_info.reason.set(reason)
             c = await stored_member_info.count()
             await stored_member_info.count.set(int(c) + 1)
             if c > 2:
@@ -251,6 +253,7 @@ class DailyCriminal(commands.Cog):
             
             await stored_member_info.status.set(0)
             await stored_member_info.end_time.set(None)
+            await stored_member_info.reason.set("")
 
             await ctx.send(f"DC ended for {member.name}")
         else:
@@ -285,15 +288,18 @@ class DailyCriminal(commands.Cog):
         embed = embed.add_field(name="DC count", value=stored_member_info["count"])
 
         status = stored_member_info["status"]
+        reason = stored_member_info.get("reason") or "No reason registered"
         if status == 0:
             embed = embed.add_field(name="Status", value="Not daily criminal")
         if status == 1:
             embed = embed.add_field(name="Status", value="Given daily criminal")
+            embed = embed.add_field(name="Reason", value=reason)
         if status == 2:
             embed = embed.add_field(name="Status", value="In daily criminal countdown")
             end = datetime.fromtimestamp(stored_member_info["end_time"])
             embed = embed.add_field(name="End time", value=end.strftime("%Y-%m-%d %H:%M"), inline=False)
             embed = embed.add_field(name="Remaining", value=self.remaining_time_string(end), inline=False)
+            embed = embed.add_field(name="Reason", value=reason)
         if status == 3:
             embed = embed.add_field(name="Status", value="Permanent daily criminal")
 
@@ -301,13 +307,15 @@ class DailyCriminal(commands.Cog):
 
     @dc.command(name="list")
     @checks.mod_or_permissions(administrator=True)
-    async def _list(self, ctx):
+    async def _list(self, ctx, include_all: bool=False):
         members = await self.config.all_members()
         guild_members = members[ctx.guild.id]
         memberlist = []
         for member, stats in guild_members.items():
+            print(member)
             if stats['status'] and member not in self.not_in_server:
-                memberlist.append({'memberid': member, **stats})
+                if include_all or stats['end_time'] is not None:
+                    memberlist.append({'memberid': member, **stats})
 
         memberlist.sort(key=lambda m: m['end_time'] if m['end_time'] else float(1e20))
 
