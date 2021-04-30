@@ -339,7 +339,10 @@ class DailyCriminal(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
-        self.not_in_server.remove(member.id)
+        try:
+            self.not_in_server.remove(member.id)
+        except ValueError:
+            pass
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
@@ -373,7 +376,10 @@ class DailyCriminal(commands.Cog):
                             if int((end - datetime.now()).total_seconds()) < 0:
                                 member = guild.get_member(member_id)
                                 if member is None:
-                                    member = await guild.fetch_member(member_id)
+                                    try:
+                                        member = await guild.fetch_member(member_id)
+                                    except discord.HTTPException:
+                                        member = None
 
                                 if member is None:
                                     self.not_in_server.append(member_id)
