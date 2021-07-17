@@ -218,7 +218,7 @@ class DailyCriminal(commands.Cog):
             # Update status
             await stored_member_info.end_time.set(datetime.timestamp(now + duration))
             await stored_member_info.status.set(2)
-            await ctx.send("Daily criminal countdown started")
+            await ctx.send("Daily criminal countdown started. It will be removed in: " + self.format_time_dhm(duration))
         elif status == 2:
             await ctx.send("User already has active countdown")
         elif status == 3:
@@ -264,8 +264,10 @@ class DailyCriminal(commands.Cog):
             return "-"
         if isinstance(end_time, float):
             end_time = datetime.fromtimestamp(end_time)
-        diff = int((end_time - datetime.now()).total_seconds())
-        
+        return self.format_time_dhm(end_time - datetime.now())
+
+    def format_time_dhm(self, delta: timedelta):
+        diff = int(delta.total_seconds())
         prefix = ""
         if diff < 0:
             prefix = "-"
@@ -274,7 +276,6 @@ class DailyCriminal(commands.Cog):
         remaining_hours = int(diff - 3600 * 24 * remaining_days)//3600
         remaining_minutes = int(diff - 3600 * 24 * remaining_days - remaining_hours * 3600)//60
         return f"{prefix}{remaining_days}d {remaining_hours}h {remaining_minutes}m"
-
 
     @dc.command()
     @checks.mod_or_permissions(administrator=True)
@@ -312,7 +313,6 @@ class DailyCriminal(commands.Cog):
         guild_members = members[ctx.guild.id]
         memberlist = []
         for member, stats in guild_members.items():
-            print(member)
             if stats['status'] and member not in self.not_in_server:
                 if include_all or stats['end_time'] is not None:
                     memberlist.append({'memberid': member, **stats})
