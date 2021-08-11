@@ -1,6 +1,6 @@
 import discord
 
-from redbot.core import commands, checks, modlog, Config
+from redbot.core import commands, checks, modlog, Config, utils
 from discord.ext import tasks
 from datetime import datetime, timedelta
 
@@ -30,6 +30,7 @@ class DailyCriminal(commands.Cog):
 
         default_guild_config = {
             "role": None,
+            "channel": None,
         }
 
         self.config.register_member(**default_member)
@@ -88,6 +89,15 @@ class DailyCriminal(commands.Cog):
 
     @dcset.command()
     @checks.mod_or_permissions(administrator=True)
+    async def channel(self, ctx, channel: commands.TextChannelConverter):
+        """
+        Set the channel to be used for daily criminal info.
+        """
+        await self.config.guild(ctx.guild).channel.set(channel.id)
+        await ctx.send(f"Daily criminal info channel role set to: {channel.mention}")
+
+    @dcset.command()
+    @checks.mod_or_permissions(administrator=True)
     async def role(self, ctx, role: commands.RoleConverter):
         """
         Set the role to be used for daily criminal.
@@ -95,12 +105,11 @@ class DailyCriminal(commands.Cog):
         await self.config.guild(ctx.guild).role.set(role.id)
         await ctx.send(f"Daily criminal role set to: {role.name}")
 
-
     @dcset.command()
     @checks.mod_or_permissions(administrator=True)
     async def log(self, ctx, pos: int):
         """
-        Set the role to be used for daily criminal.
+        Send the most recent logged errors in chat.
         """
         if pos < 0 or pos > 5:
             return
@@ -147,6 +156,22 @@ class DailyCriminal(commands.Cog):
                     await ctx.send(str(e) + f" Failed for {member_id}")
         await ctx.send("Checked")
 
+    @commands.command()
+    async def dcstatus(self, ctx):
+        """
+        Sends you a direct message with information about your daily criminal status
+        """
+        if ctx.guild is None:
+            return await ctx.send("This command does not work in direct messages")
+        embed = await self.get_status_embed(ctx.author)
+        channelid = await self.config.guild(ctx.guild).channel()
+        if channelid is not None:
+            channel = ctx.guild.get_channel(channelid) or await self.bot.fetch_channel(channelid)
+            embed.description = f"Read {channel.mention} for info about daily criminal"
+        try:
+            await ctx.author.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.channel.send(f"I can't send you direct messages {ctx.author.mention}")
 
     @commands.group(invoke_without_command=True)
     @checks.mod_or_permissions(administrator=True)
@@ -279,10 +304,15 @@ class DailyCriminal(commands.Cog):
 
     @dc.command()
     @checks.mod_or_permissions(administrator=True)
-    async def status(self, ctx, member: commands.MemberConverter):
+    async def status(self, ctx, member: commands.MemberConverter = None):
         """
         Chech the daily criminal status for a member.
         """
+        # stored_member_info = await self.config.member(member)()
+        embed = await self.get_status_embed(member)
+        await ctx.send(embed=embed)
+
+    async def get_status_embed(self, member):
         stored_member_info = await self.config.member(member)()
 
         embed = discord.Embed(title=f"DC status for {member} ({member.id})")
@@ -303,8 +333,9 @@ class DailyCriminal(commands.Cog):
             embed = embed.add_field(name="Reason", value=reason)
         if status == 3:
             embed = embed.add_field(name="Status", value="Permanent daily criminal")
-
-        await ctx.send(embed=embed)
+            embed = embed.add_field(name="Reason", value=reason)
+        
+        return embed
 
     @dc.command(name="list")
     @checks.mod_or_permissions(administrator=True)
