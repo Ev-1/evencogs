@@ -328,7 +328,7 @@ class DailyCriminal(commands.Cog):
         if status == 2:
             embed = embed.add_field(name="Status", value="In daily criminal countdown")
             end = datetime.fromtimestamp(stored_member_info["end_time"])
-            embed = embed.add_field(name="End time", value=end.strftime("%Y-%m-%d %H:%M"), inline=False)
+            embed = embed.add_field(name="End time", value=end.strftime("%Y-%m-%d %H:%M") + "(UTC)", inline=False)
             embed = embed.add_field(name="Remaining", value=self.remaining_time_string(end), inline=False)
             embed = embed.add_field(name="Reason", value=reason)
         if status == 3:
