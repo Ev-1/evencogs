@@ -31,6 +31,7 @@ class DailyCriminal(commands.Cog):
         default_guild_config = {
             "role": None,
             "channel": None,
+            "dc_info_message": None,
         }
 
         self.config.register_member(**default_member)
@@ -216,6 +217,13 @@ class DailyCriminal(commands.Cog):
             case = await modlog.create_case(
                 ctx.bot, ctx.guild, ctx.message.created_at, action_type=dc_type,
                 user=member, moderator=ctx.author, reason=reason)
+
+            dc_info_message = await self.config.guild(ctx.guild).dc_info_message()
+            if dc_info_message:
+                try:
+                    await member.send(dc_info_message)
+                except discord.Forbidden
+                    await ctx.send("Failed to send DM to user")
 
             await ctx.send("User given daily criminal")
         elif status == 1:
