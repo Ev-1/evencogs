@@ -222,7 +222,7 @@ class DailyCriminal(commands.Cog):
             if dc_info_message:
                 try:
                     await member.send(dc_info_message)
-                except discord.Forbidden
+                except discord.Forbidden:
                     await ctx.send("Failed to send DM to user")
 
             await ctx.send("User given daily criminal")
