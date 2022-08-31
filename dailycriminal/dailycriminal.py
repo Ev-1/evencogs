@@ -99,6 +99,15 @@ class DailyCriminal(commands.Cog):
 
     @dcset.command()
     @checks.mod_or_permissions(administrator=True)
+    async def message(self, ctx, message: str):
+        """
+        Set the message to be sent to users receiving daily criminal.
+        """
+        await self.config.guild(ctx.guild).dc_info_message.set(message)
+        await ctx.send(f"Daily criminal DM info message set to: {message}")
+
+    @dcset.command()
+    @checks.mod_or_permissions(administrator=True)
     async def role(self, ctx, role: commands.RoleConverter):
         """
         Set the role to be used for daily criminal.
